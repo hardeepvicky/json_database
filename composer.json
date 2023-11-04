@@ -1,0 +1,23 @@
+{
+    "name": "hardeep-vicky/json-database",
+    "version" : "1.0.0",
+    "description": "Json Database is php class to manage json files as database",
+    "authors": [
+        {
+            "name" : "Hardeep Singh",
+            "email": "hardeepvicky1@gmail.com"
+        }
+    ],
+    "license": "MIT",
+    "require": {
+        "php" : ">=8.0"
+    },   
+    "autoload": {
+        "psr-4": {
+            "HardeepVicky\\Json\\": "src/"
+        }
+    },
+    "minimum-stability" : "stable",
+    "prefer-stable": true,
+    "require-dev": {}
+}
