@@ -148,6 +148,30 @@ class JsonDatabase
         return $this->unique_attributes;
     }
 
+    public static function getInfo(String $path)
+    {
+        $path = strtolower(trim($path)); 
+
+        if (!$path)
+        {
+            self::throwException("path is empty");
+        }
+
+        $path = Util::addPathSlashs($path, 'END');
+
+        if (!file_exists($path))
+        {
+            self::throwException("path $path not exist");
+        }
+
+        if (!self::$info_json_database)
+        {
+            self::$info_json_database = new JsonDatabase($path, self::INFO_FILE);
+        }
+
+        return self::$info_json_database->get();
+    }
+
     protected function onPut(array $json_array, String $json_str)
     {
         if (!self::$info_json_database)
