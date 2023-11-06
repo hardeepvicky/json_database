@@ -29,6 +29,8 @@ $json_database->setRequiredAttr(["name"]);
 
 $json_database->setUniqueAttr(["name"]);
 
-$json_database->insert(["name" => "vicky"]);
+$json_database->insert(["name" => null]);
 
 $records = $json_database->get();
+
+dump($records);

@@ -130,6 +130,19 @@ class JsonDatabase
 
     public function setRequiredAttr(Array $arr)
     {
+        foreach($arr as $v)
+        {
+            if (!is_string($v))
+            {
+                self::throwException("value of array should be string");
+            }
+
+            if (strlen($v) == 0)
+            {
+                self::throwException("string length of value is 0");
+            }
+        }
+
         $this->required_attributes = $arr;
     }
 
@@ -140,6 +153,20 @@ class JsonDatabase
 
     public function setUniqueAttr(Array $arr)
     {
+        foreach($arr as $v)
+        {
+            if (!is_string($v))
+            {
+                self::throwException("value of array should be string");
+            }
+
+            if (strlen($v) == 0)
+            {
+                self::throwException("string length of value is 0");
+            }
+
+        }
+
         $this->unique_attributes = $arr;
     }
 
@@ -172,7 +199,7 @@ class JsonDatabase
         return self::$info_json_database->get();
     }
 
-    protected function onPut(array $json_array, String $json_str)
+    protected function onWrite(array $json_array, String $json_str)
     {
         if (!self::$info_json_database)
         {
@@ -181,9 +208,16 @@ class JsonDatabase
 
         $json_obj = self::$info_json_database->get();
 
-        $json_obj[$this->file_name]['array_count'] = count($json_array);
-        $json_obj[$this->file_name]['string_length'] = strlen($json_str);
-        $json_obj[$this->file_name]['filesize'] = filesize($this->getFile());
+        $file_size_bytes = filesize($this->getFile());
+        $file_size_kb = floor($file_size_bytes / 1024);
+        $file_size_mb = floor($file_size_kb / 1024);
+
+        $json_obj[$this->file_name] = [];
+        $json_obj[$this->file_name]['json_array_count'] = count($json_array);
+        $json_obj[$this->file_name]['json_string_length'] = strlen($json_str);
+        $json_obj[$this->file_name]['file_info']['size']['bytes'] = $file_size_bytes;        
+        $json_obj[$this->file_name]['file_info']['size']['kb'] = $file_size_kb;
+        $json_obj[$this->file_name]['file_info']['size']['mb'] = $file_size_mb;
 
         $json = self::jsonEncode($json_obj);
 
@@ -195,7 +229,7 @@ class JsonDatabase
         }
     }
 
-    private function put(array $json_array)
+    private function write(array $json_array)
     {
         $file = $this->getFile();
 
@@ -204,10 +238,10 @@ class JsonDatabase
         $result = file_put_contents($file, $json_str);
 
         if ($result === false) {
-            self::throwException("Fail To put json in $file");
+            self::throwException("Fail To write json in $file");
         }
 
-        $this->onPut($json_array, $json_str);
+        $this->onWrite($json_array, $json_str);
     }
 
     public function get()
@@ -226,23 +260,71 @@ class JsonDatabase
 
     private function _checkBeforeSave(Array $records, Array $save_record, $index = null)
     {
+        $error_list = [];
+
+        if ($this->required_attributes)
+        {
+            foreach($this->required_attributes as $key)
+            {
+                if ( !array_key_exists($key, $save_record) )
+                {
+                    $error_list[] = "$key should be set in save_record";
+                }
+            }
+
+            if (count($error_list) > 0)
+            {
+                if (self::$show_error_as_html)
+                {
+                    self::showErrors("Required Errors", $error_list);
+                }
+                else 
+                {
+                    throw new UserDataException("Fail To Save", $error_list);
+                }
+            }
+        }
+
         //check for unique_records
         if ($this->unique_attributes) 
         {
             $error_list = [];
 
-            if (is_null($index))
+            foreach($this->unique_attributes as $unique_key)
             {
-                foreach($this->unique_attributes as $unique_key)
+                if ( !array_key_exists($unique_key, $save_record) )
                 {
-                    if (isset($save_record[$unique_key]))
+                    $error_list[] = "$unique_key should be set in save_record";
+                }
+                else 
+                {
+                    $value_type = gettype($save_record[$unique_key]);
+
+                    $allow_types_for_unique_values = [
+                        "string", "int", "float", "NULL"
+                    ];
+
+                    if (!in_array($value_type, $allow_types_for_unique_values))
+                    {
+                        $str = implode(" or ", $allow_types_for_unique_values);
+                        $error_list[] = "value of $unique_key should be ($str) in save_record";
+                    }
+                }
+            }
+
+            if (empty($error_list))
+            {
+                if (is_null($index))
+                {
+                    //insert
+
+                    foreach($this->unique_attributes as $unique_key)
                     {
                         $is_found = false;
-
-                        //insert
+                        
                         foreach($records as $k => $record)
                         {
-                            if (isset($record[$unique_key]))
+                            if (isset($record[$unique_key]) && !is_null($record[$unique_key]))
                             {
                                 if ($record[$unique_key] == $save_record[$unique_key])
                                 {
@@ -254,27 +336,20 @@ class JsonDatabase
                         if ($is_found)
                         {
                             $error_list[] = "duplicate $unique_key : " . $save_record[$unique_key];
-                        }
-                    }
-                    else
-                    {
-                        $error_list[] = "$unique_key should be set in save_record";
+                        }                        
+                       
                     }
                 }
-            }
-            else
-            {
-                //update
-                foreach($this->unique_attributes as $unique_key)
+                else
                 {
-                    if (isset($save_record[$unique_key]))
+                    //update
+                    foreach($this->unique_attributes as $unique_key)
                     {
                         $is_found = false;
 
-                        //insert
                         foreach($records as $k => $record)
                         {
-                            if (isset($record[$unique_key]))
+                            if (isset($record[$unique_key]) && !is_null($record[$unique_key]))
                             {
                                 if ($k != $index && $record[$unique_key] == $save_record[$unique_key])
                                 {
@@ -286,11 +361,7 @@ class JsonDatabase
                         if ($is_found)
                         {
                             $error_list[] = "duplicate $unique_key : " . $save_record[$unique_key];
-                        }
-                    }
-                    else
-                    {
-                        $error_list[] = "$unique_key should be set in save_record";
+                        }                        
                     }
                 }
             }
@@ -311,34 +382,13 @@ class JsonDatabase
 
     public function insert(Array $save_record)
     {
-        $error_list = [];
-        foreach($this->required_attributes as $key)
-        {
-            if (!isset($save_record[$key]))
-            {
-                $error_list[] = "$key should be set in save_record";
-            }
-        }
-
-        if (count($error_list) > 0)
-        {
-            if (self::$show_error_as_html)
-            {
-                self::showErrors("Required Errors", $error_list);
-            }
-            else 
-            {
-                throw new UserDataException("Fail To Save", $error_list);
-            }
-        }
-
         $records = $this->get();
         
         $this->_checkBeforeSave($records, $save_record);
 
         $records[] = $save_record;
 
-        $this->put($records);
+        $this->write($records);
     }
 
     public function update(Array $save_record, int $index)
@@ -354,15 +404,22 @@ class JsonDatabase
 
         $records[$index] = array_merge($records[$index], $save_record);
 
-        $this->put($records);
+        $this->write($records);
     }
 
     public function delete(int $index)
     {
         $records = $this->get();
 
-        unset($records[$index]);
+        if (isset($records[$index]))
+        {
+            unset($records[$index]);
 
-        $this->put(array_values($records));
+            $this->write(array_values($records));
+
+            return true;
+        }
+
+        return false;
     }
 }
