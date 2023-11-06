@@ -8,7 +8,7 @@ JsonDatabase::showErrorAsHtml(true);
 
 $json_database = new JsonDatabase("./data_files", "test");
 
-$json_database->setRequiredAttr(["name"]);
+$json_database->setRequiredAttributes(["name"]);
 
 for($i = 1; $i <= 10; $i++)
 {
@@ -18,19 +18,40 @@ for($i = 1; $i <= 10; $i++)
     ]);
 }
 
+
 $records = JsonDatabase::getInfo("./data_files");
 
 dump($records);
+$json_database = new JsonDatabase("./data_files", "users", [
+    "attributes" => [
+        "created" => true,
+        "updated" => true,
+    ]
+]);
 
+$json_database->setRequiredAttributes(["name", "age"]);
 
-$json_database = new JsonDatabase("./data_files", "users");
+$json_database->setUniqueAttributes(["name"]);
 
-$json_database->setRequiredAttr(["name"]);
-
-$json_database->setUniqueAttr(["name"]);
-
-$json_database->insert(["name" => null]);
+//$json_database->empty();
+// $json_database->insert(["name" => "hardeep", "age" => 31]);
+// $json_database->insert(["name" => "vicky", "age" => 31]);
+// $json_database->insert(["name" => "meenu", "age" => 33]);
+// $json_database->insert(["name" => "seema", "age" => 35]);
+// $json_database->update(["name" => "vicky", "age" => 30], 1);
 
 $records = $json_database->get();
+
+dump($records);
+
+//$records = $json_database->filter($records, [], ["name" => null]);
+
+$records = $json_database->filter($records, [], ["name" => function($index, $record, $key)
+{
+    if (is_null($record[$key]))
+    {
+        return false;
+    }
+}], "name", "asc");
 
 dump($records);
