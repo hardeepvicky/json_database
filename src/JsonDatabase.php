@@ -379,8 +379,7 @@ class JsonDatabase
         }
         else
         {
-            $data_type = gettype(0);
-            $json_obj[$this->file_name][$attribute_name]['data_types'][$data_type] = $data_type;
+            $json_obj[$this->file_name][$attribute_name]['data_types'][] = gettype(0);
             $json_obj[$this->file_name][$attribute_name]['first_value'] = 0;
             $json_obj[$this->file_name][$attribute_name]['last_value'] = 0;
         }
@@ -551,17 +550,22 @@ class JsonDatabase
         {
             if (!isset($json_obj[$this->file_name][$attribute_name]))
             {
-                $json_obj[$this->file_name][$attribute_name] = [];
+                $json_obj[$this->file_name][$attribute_name] = [
+                    'data_types' => [],
+                    'first_value' => $v,
+                    'last_value' => "",
+                ];
             };
 
             $data_type = gettype($v);
 
-            $json_obj[$this->file_name][$attribute_name]['data_types'][$data_type] = $data_type;
+            if (!in_array($data_type, $json_obj[$this->file_name][$attribute_name]['data_types'] ) )
+            {
+                $json_obj[$this->file_name][$attribute_name]['data_types'][] = $data_type;
+            }
 
-            $json_obj[$this->file_name][$attribute_name]['first_value'] = $v;
+            $json_obj[$this->file_name][$attribute_name]['last_value'] = $v;
         }
-
-        $json_obj[$this->file_name][$attribute_name]['last_value'] = $v;
 
         $json_str = self::jsonEncode($json_obj);
 

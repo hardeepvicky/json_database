@@ -20,14 +20,14 @@ $json_database->setUniqueAttributes(["name"]);
 
     //dump($update_count, true);
 
-for($i = 1; $i <= 2; $i++)
-{
-    $json_database->insert([
-        "name" => get_random_name(),
-        "age" => mt_rand(5,60),
-        "dob" => get_random_date_time()
-    ]);
-}
+    // for($i = 1; $i <= 2; $i++)
+    // {
+    //     $json_database->insert([
+    //         "name" => get_random_name(),
+    //         "age" => mt_rand(5,60),
+    //         "dob" => get_random_date_time()
+    //     ]);
+    // }
 
 $records = $json_database->get();
 
