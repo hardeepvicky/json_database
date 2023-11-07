@@ -150,7 +150,7 @@ function get_random_date_time()
 {
     $int= mt_rand(1262055681,1262055681);
 
-    $string = date("Y-m-d H:i:s",$int);
+    $string = date("d-M-Y", $int);
 
     return $string;
 }
