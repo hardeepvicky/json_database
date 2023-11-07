@@ -5,7 +5,10 @@ use Exception;
 
 class JsonDatabase
 {
-    const INFO_FILE = "info";
+    const FILE_INFO = "info";    
+    const FILE_ATTRIBUTE = "attribute";    
+
+    const PRIMARY_KEY = "primary_key";
 
     const ALLOW_VALUES_IN_JSON_RECORD = [
         'boolean', 'integer', 'double', 'string', 'NULL'
@@ -18,9 +21,11 @@ class JsonDatabase
         ]
     ];
 
+    const RESERVE_FILE_NAMES = [self::FILE_INFO, self::FILE_ATTRIBUTE];    
+
     const DEFAULT_DATE_TIME_FORMAT = 'Y-m-d H:i:s';
 
-    private static $info_json_database, $composer_json;
+    private static $info_json_database, $composer_json, $attribute_json_database;
     private static bool $show_error_as_html = true;
 
     private String $path;
@@ -29,7 +34,9 @@ class JsonDatabase
 
     private Array $required_attributes = [];
 
-    private Array $unique_attributes = [];
+    private Array $unique_attributes = [
+        self::PRIMARY_KEY
+    ];
 
     public static function showErrorAsHtml(bool $v)
     {
@@ -108,11 +115,11 @@ class JsonDatabase
 
         $json_str = file_get_contents($file, FILE_USE_INCLUDE_PATH);
 
-        self::$composer_json = self::jsonDecode($json_str);
+        return self::$composer_json = self::jsonDecode($json_str);
     }
 
 
-    public function __construct(String $path, String $file_name, Array $config = [])
+    private function __construct(String $path, String $file_name, Array $config = [])
     {
         $this->path = strtolower(trim($path));
 
@@ -143,6 +150,18 @@ class JsonDatabase
         }
 
         $this->config = array_merge_recursive(self::DEFAULT_CONFIG, $config);
+    }
+
+    public static function getInstance(String $path, String $file_name, Array $config = [])
+    {
+        $instance = new self($path, $file_name, $config); 
+
+        if (in_array($instance->file_name, self::RESERVE_FILE_NAMES))
+        {
+            self::throwException("$instance->file_name is reserved. this is file use by JsonDatabase");
+        }
+
+        return $instance;
     }
 
     public static function isValidStringArrayList(Array $list)
@@ -205,7 +224,7 @@ class JsonDatabase
 
     public function getInfoFile()
     {
-        return self::INFO_FILE;
+        return self::FILE_INFO;
     }
 
     public function getFileName()
@@ -270,28 +289,21 @@ class JsonDatabase
 
         if (!self::$info_json_database)
         {
-            self::$info_json_database = new JsonDatabase($path, self::INFO_FILE);
-        }
-
-        return self::$info_json_database->get();
-    }
-
-    protected function onWrite(array $json_array, String $json_str)
-    {
-        if (!self::$info_json_database)
-        {
-            self::$info_json_database = new JsonDatabase($this->path, self::INFO_FILE);
+            self::$info_json_database = new JsonDatabase($path, self::FILE_INFO);
         }
 
         $info_json_obj = self::$info_json_database->get();
 
-        if (empty(self::$composer_json))
+        if ( empty($info_json_obj) )
         {
-            self::getComposerJson();
-
-            if (!isset(self::$composer_json['version']))
+            if ( empty(self::$composer_json) )
             {
-                self::throwException("version is not set in composer_json");
+                self::getComposerJson();
+
+                if ( !isset(self::$composer_json['version']) )
+                {
+                    self::throwException("version is not set in composer.json");
+                }
             }
 
             $info_json_obj['JsonDatabase'] = [
@@ -299,53 +311,93 @@ class JsonDatabase
             ];
         }
 
-        $file_size_bytes = filesize($this->getFile());
-        $file_size_kb = floor($file_size_bytes / 1024);
-        $file_size_mb = floor($file_size_kb / 1024);
+        return $info_json_obj;
+    }
 
-        if (!isset($info_json_obj['files'][$this->file_name]))
+    private static function _writeInfo(String $path, String $file_name, Array $file_info, Array $json_info = [])
+    {
+        $info_json_obj = self::getInfo($path);
+
+        if (!isset($info_json_obj['files'][$file_name]))
         {
-            $info_json_obj['files'][$this->file_name] = [];            
-            $info_json_obj['files'][$this->file_name]['file_info'] = [
-                'created' => date(self::DEFAULT_DATE_TIME_FORMAT)
+            $info_json_obj['files'][$file_name] = [
+                'file_info' => [],
+                'attribute_info' => [],
+                'json_info' => [],
             ];
+
+            $info_json_obj['JsonDatabase']['file_count'] = count($info_json_obj['files']);
+
+            $file_info['created'] = date(self::DEFAULT_DATE_TIME_FORMAT);
         }
 
-        $info_json_obj['files'][$this->file_name]['file_info']['size']['bytes'] = $file_size_bytes;
-        $info_json_obj['files'][$this->file_name]['file_info']['size']['kb'] = $file_size_kb;
-        $info_json_obj['files'][$this->file_name]['file_info']['size']['mb'] = $file_size_mb;
-        $info_json_obj['files'][$this->file_name]['file_info']['modified'] = date(self::DEFAULT_DATE_TIME_FORMAT);
+        $file_info['updated'] = date(self::DEFAULT_DATE_TIME_FORMAT);
 
-        $info_json_obj['JsonDatabase']['file_count'] = count($info_json_obj['files']);
+        if ($file_info)
+        {
+            $info_json_obj['files'][$file_name]['file_info'] = array_merge($info_json_obj['files'][$file_name]['file_info'], $file_info);
+        }
 
-        $info_json_obj['files'][$this->file_name]['json_info'] = [];
-        $info_json_obj['files'][$this->file_name]['json_info']['json_array_count'] = count($json_array);
-        $info_json_obj['files'][$this->file_name]['json_info']['json_string_length'] = strlen($json_str);
+        if ($json_info)
+        {
+            $info_json_obj['files'][$file_name]['json_info'] = array_merge($info_json_obj['files'][$file_name]['json_info'], $json_info);
+        }
 
         $json_str = self::jsonEncode($info_json_obj);
 
-        $info_file = self::$info_json_database->getFile();
-
-        $result = file_put_contents($info_file, $json_str);
-
-        if ($result === false) {
-            self::throwException("Fail To put json in $info_file");
-        }
-    }
-
-    private function write(array $json_array)
-    {
-        $file = $this->getFile();
-
-        $json_str = self::jsonEncode($json_array);
+        $file = self::$info_json_database->getFile();
 
         $result = file_put_contents($file, $json_str);
 
         if ($result === false) {
-            self::throwException("Fail To write json in $file");
+            self::throwException("Fail To put json in $file");
         }
 
-        $this->onWrite($json_array, $json_str);
+        return $info_json_obj;
+    }
+
+    public static function getAttributeInfo(String $path)
+    {
+        if (!self::$attribute_json_database)
+        {
+            self::$attribute_json_database = new JsonDatabase($path, self::FILE_ATTRIBUTE);
+        }
+
+        return self::$attribute_json_database->get();
+    }
+
+    public function getAttributeNextNumber($attribute_name)
+    {
+        $json_obj = self::getAttributeInfo($this->path);
+
+        if (isset($json_obj[$this->file_name][$attribute_name]['last_value']))
+        {
+            if (!is_int($json_obj[$this->file_name][$attribute_name]['last_value']))
+            {
+                $json_obj[$this->file_name][$attribute_name]['last_value'] = 0;
+            }
+        }
+        else
+        {
+            $data_type = gettype(0);
+            $json_obj[$this->file_name][$attribute_name]['data_types'][$data_type] = $data_type;
+            $json_obj[$this->file_name][$attribute_name]['first_value'] = 0;
+            $json_obj[$this->file_name][$attribute_name]['last_value'] = 0;
+        }
+
+        $json_obj[$this->file_name][$attribute_name]['last_value'] += 1;
+
+        $json_str = self::jsonEncode($json_obj);
+
+        $file = self::$attribute_json_database->getFile();
+
+        $result = file_put_contents($file, $json_str);
+
+        if ($result === false) {
+            self::throwException("Fail To put json in $file");
+        }
+
+        return $json_obj[$this->file_name][$attribute_name]['last_value'];
     }
 
     public function get()
@@ -361,6 +413,37 @@ class JsonDatabase
 
         return [];
     }
+
+    private function write(array $json_array)
+    {
+        $file = $this->getFile();
+
+        $json_str = self::jsonEncode($json_array);
+
+        $result = file_put_contents($file, $json_str);
+
+        if ($result === false) {
+            self::throwException("Fail To write json in $file");
+        }
+
+        $file_info = [
+            'file_size' => [
+                'bytes' => 0,
+                'kb' => 0,
+                'mb' => 0,
+            ]
+        ];
+
+        $file_info['file_size']['bytes'] = $file_size_bytes = filesize($this->getFile());
+        $file_info['file_size']['kb'] = $file_size_kb = floor($file_size_bytes / 1024);
+        $file_info['file_size']['mb'] = floor($file_size_kb / 1024);
+        
+        $json_info['json_array_count'] = count($json_array);
+        $json_info['json_string_length'] = strlen($json_str);
+
+        self::_writeInfo($this->path, $this->file_name, $file_info, $json_info);
+    }
+
     
 
     private function _checkForRequired(Array $save_record)
@@ -460,6 +543,40 @@ class JsonDatabase
         }
     }
 
+    private function _updateAttributeInfo(Array $save_record)
+    {
+        $json_obj = self::getAttributeInfo($this->path);
+
+        foreach($save_record as $attribute_name => $v)
+        {
+            if (!isset($json_obj[$this->file_name][$attribute_name]))
+            {
+                $json_obj[$this->file_name][$attribute_name] = [];
+            };
+
+            $data_type = gettype($v);
+
+            $json_obj[$this->file_name][$attribute_name]['data_types'][$data_type] = $data_type;
+
+            $json_obj[$this->file_name][$attribute_name]['first_value'] = $v;
+        }
+
+        $json_obj[$this->file_name][$attribute_name]['last_value'] = $v;
+
+        $json_str = self::jsonEncode($json_obj);
+
+        $file = self::$attribute_json_database->getFile();
+
+        $result = file_put_contents($file, $json_str);
+
+        if ($result === false) {
+            self::throwException("Fail To put json in $file");
+        }
+
+        return $json_obj;
+    }
+
+
     public function insert(Array $save_record)
     {
         self::checkDataType($save_record, " save_record : ");
@@ -468,9 +585,13 @@ class JsonDatabase
 
         $records = $this->get();
 
+        $save_record[self::PRIMARY_KEY] = $this->getAttributeNextNumber(self::PRIMARY_KEY);
+
         $this->_checkForUnique($records, $save_record);
 
         $this->_alterRecordBeforeSave($save_record);
+
+        $this->_updateAttributeInfo($save_record);
 
         $records[] = $save_record;
 
@@ -480,8 +601,6 @@ class JsonDatabase
     public function update(Array $save_record, Array $conditions)
     {
         self::checkDataType($save_record, " save_record : ");
-
-        $this->_checkForRequired($save_record);
 
         $records = $this->get();
 
@@ -496,9 +615,13 @@ class JsonDatabase
 
             $new_record = array_merge($record, $save_record);
 
+            $this->_checkForRequired($new_record);
+
             $this->_checkForUnique($records, $new_record, $index);
 
             $this->_alterRecordBeforeSave($new_record, $index);
+
+            $this->_updateAttributeInfo($new_record);
 
             $records[$index] = $new_record;
         }
