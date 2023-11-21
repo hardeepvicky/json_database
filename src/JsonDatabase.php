@@ -322,7 +322,6 @@ class JsonDatabase
         {
             $info_json_obj['files'][$file_name] = [
                 'file_info' => [],
-                'attribute_info' => [],
                 'json_info' => [],
             ];
 
